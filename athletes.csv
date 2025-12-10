@@ -1,9 +1,7 @@
 athlete_name,age,club,seat,event,race,place,bow,finish,margin,num_boats
 John Blust,18,DBC,1,Mens Varsity 1x,Final,1st,10,7:17.500,,13
 John Blust,18,DBC,2,Mens Varsity 4-,Final,2nd,6,6:37.920,0:00.600,8
-Eamon Matlock,19,YQCR,1,Mens Varsity 1x,Final,2nd,6,7:21.290,0:03.790,13
-Eamon Matlock,19,YQCR,2,Mens Varsity 2x,Final,1st,8,6:30.760,,18
-Eamon Matlock,19,YQCR,4,Mens Varsity 4x,Final,1st,6,6:16.680,,12
+"Matlock, E.",,Y Quad Cities,,Mens Varsity 1x,Final,2nd,6,7:21.290,0:03.790,13
 Jeremiah Lesniak,19,LPBC,1,Mens Varsity 1x,Final,3rd,5,7:22.680,0:05.180,13
 Jeremiah Lesniak,19,LPBC,4,Mens Varsity 4x,Final,2nd,1,6:20.430,0:03.750,12
 Noah Holst,18,LPR,1,Mens Varsity 1x,Final,4th,1,7:30.480,0:12.980,13
@@ -198,6 +196,8 @@ Rhea Kapoor,14,WRC,4,Womens U16 4x+,Final,3rd,2,9:47.390,0:59.670,3
 Elizabeth Cornelius,15,WRC,3,Womens U16 4x+,Final,3rd,2,9:47.390,0:59.670,3
 Simone Penca,15,WRC,2,Womens U16 4x+,Final,3rd,2,9:47.390,0:59.670,3
 Mary Kaufman,15,WRC,1,Womens U16 4x+,Final,3rd,2,9:47.390,0:59.670,3
+Eamon Matlock,19,YQCR,2,Mens Varsity 2x,Final,1st,8,6:30.760,,18
+Eamon Matlock,19,YQCR,4,Mens Varsity 4x,Final,1st,6,6:16.680,,12
 Graham Matlock,17,YQCR,1,Mens Varsity 2x,Final,1st,8,6:30.760,,18
 Graham Matlock,17,YQCR,1,Mens Varsity 4x,Final,1st,6,6:16.680,,12
 Jack Foltz,19,IRC,2,Mens Varsity 2x,Final,2nd,10,6:31.990,0:01.230,18
@@ -785,8 +785,10 @@ Leland Angel,16,GMRC,2,Mens U17 2x,Final,5th,13,7:23.780,0:32.400,16
 Sai Anish Maheshwaram,16,GMRC,1,Mens U17 2x,Final,5th,13,7:23.780,0:32.400,16
 Aslan Choi,16,HCR,2,Mens U17 2x,Final,7th,5,7:42.260,0:50.880,16
 Jonathan Masood,15,HCR,1,Mens U17 2x,Final,7th,5,7:42.260,0:50.880,16
-"Stanaker, O.",,Chicago Training,,Womens U17 2x,Final,5th,4,8:17.050,0:20.600,26
-"Donahue, A.",,Great Miami Crew,,Womens U17 2x,Final,7th,23,8:27.020,0:30.570,26
+Olive Stanaker,16,CTC,2,Womens U17 2x,Final,5th,4,8:17.050,0:20.600,26
+Ava Obafemi,16,CTC,1,Womens U17 2x,Final,5th,4,8:17.050,0:20.600,26
+Amelia Donahue,15,GMRC,2,Womens U17 2x,Final,7th,23,8:27.020,0:30.570,26
+Allison Grove,14,GMRC,1,Womens U17 2x,Final,7th,23,8:27.020,0:30.570,26
 Elliot Morris,19,TRRA,4,Mens Varsity 4-,Final,1st,4,6:37.320,,8
 Burke Keener,17,TRRA,3,Mens Varsity 4-,Final,1st,4,6:37.320,,8
 Kavi Singh,17,TRRA,2,Mens Varsity 4-,Final,1st,4,6:37.320,,8
