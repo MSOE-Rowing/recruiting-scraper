@@ -25,12 +25,148 @@ from bs4 import BeautifulSoup
 import concurrent.futures
 import csv
 import time
+from nameparser import HumanName
 
 # Create a cloudscraper instance to bypass Cloudflare protection
 scraper = cloudscraper.create_scraper()
 
 base_url = "https://www.regattacentral.com"
 main_results_url = "https://www.regattacentral.com/regatta/results2?job_id=9168"
+
+
+def normalize_name(name):
+    """Normalize an athlete's name using HumanName parser.
+    
+    Parses a name string into components and extracts only the first and last name.
+    This allows matching the same person across multiple entries where their name
+    might be formatted differently (e.g., with initials, middle names, suffixes, etc.).
+    
+    The normalized form is "FirstName LastName" which is used as the aggregation key.
+    This ensures that "John Smith", "J. Smith", and "John Q. Smith" all map to the
+    same athlete record.
+    
+    Args:
+        name (str): Raw name string from the scraper (e.g., "John Q. Smith", "J Smith")
+        
+    Returns:
+        str: Normalized name in "FirstName LastName" format for consistent grouping.
+             Falls back to original string if parsing fails.
+    """
+    try:
+        parsed = HumanName(name.strip())
+        # Extract only first and last name, ignore middle names/initials/suffixes
+        first = parsed.first.strip()
+        last = parsed.last.strip()
+        if first and last:
+            return f"{first} {last}"
+        elif first:
+            return first
+        elif last:
+            return last
+        else:
+            return name.strip()
+    except Exception:
+        # Fallback to simple strip if parsing fails
+        return name.strip()
+
+
+def get_regatta_metadata(html):
+    """Extract regatta metadata from the main results page HTML.
+    
+    Parses the regatta header section to extract information about the regatta
+    including name, dates, venue, location, host, and statistics.
+    
+    Args:
+        html (str): HTML content of the main results page
+        
+    Returns:
+        dict: Dictionary containing regatta metadata:
+              - name (str): Regatta name
+              - start_date (str): Start date of the regatta
+              - end_date (str): End date of the regatta
+              - race_type (str): Type of race (e.g., "sprint")
+              - venue (str): Venue name
+              - location (str): City, state, country
+              - host (str): Hosting organization
+              - sanctioned (bool): Whether it's a USRowing sanctioned regatta
+              - entries (str): Number of entries
+              - clubs (str): Number of participating clubs
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    metadata = {
+        "name": "",
+        "start_date": "",
+        "end_date": "",
+        "race_type": "",
+        "venue": "",
+        "location": "",
+        "host": "",
+        "sanctioned": False,
+        "entries": "",
+        "clubs": "",
+    }
+    
+    # Find the regatta header
+    header = soup.select_one(".rc-regatta-header")
+    if not header:
+        return metadata
+    
+    # Get regatta name from h2
+    name_el = header.select_one("h2[itemprop='name']")
+    if name_el:
+        metadata["name"] = name_el.get_text(strip=True)
+    
+    # Get dates
+    start_date = header.select_one("span[itemprop='startDate']")
+    if start_date:
+        metadata["start_date"] = start_date.get_text(strip=True)
+    
+    end_date = header.select_one("span[itemprop='endDate']")
+    if end_date:
+        metadata["end_date"] = end_date.get_text(strip=True)
+    
+    # Get location
+    location_el = header.select_one("li[itemprop='location']")
+    if location_el:
+        metadata["location"] = location_el.get_text(strip=True)
+    
+    # Get venue (from the link to venue page)
+    venue_link = header.select_one("a[href*='/venues/venue.jsp']")
+    if venue_link:
+        metadata["venue"] = venue_link.get_text(strip=True)
+    
+    # Parse the details lists
+    details = header.select(".rc-regatta-details li")
+    for li in details:
+        text = li.get_text(strip=True)
+        # Check for race type (sprint, head, etc.)
+        if text.lower() in ["sprint", "head", "dual"]:
+            metadata["race_type"] = text.lower()
+    
+    # Get host from the second details list
+    details2 = header.select(".rc-regatta-details-2 li")
+    for li in details2:
+        text = li.get_text(strip=True)
+        if text.startswith("Hosted By:"):
+            metadata["host"] = text.replace("Hosted By:", "").strip()
+        if "USRowing Sanctioned" in text:
+            metadata["sanctioned"] = True
+    
+    # Get stats (entries and clubs)
+    stats = header.select(".rc-regatta-stat")
+    for stat in stats:
+        value_el = stat.select_one("span[itemprop='value']")
+        h4_el = stat.select_one("h4")
+        if value_el and h4_el:
+            label = h4_el.get_text(strip=True).lower()
+            value = value_el.get_text(strip=True)
+            if label == "entries":
+                metadata["entries"] = value
+            elif label == "clubs":
+                metadata["clubs"] = value
+    
+    return metadata
+
 
 
 def get_event_links(html):
@@ -52,7 +188,6 @@ def get_event_links(html):
         if href.startswith("/"):
             href = base_url + href
         event_links.append(href)
-        print(a)
     return event_links
 
 
@@ -104,14 +239,13 @@ def fetch_lineup(job_id, boat_id):
 
 
 def parse_lineup_html(html):
-    """Parse HTML lineup data to extract athlete information.
-    
-    Uses regex to extract athlete details from the LineupServlet HTML response.
-    Expected format: "seat: name - age (club)"
-    
+    """
+    Desc: 
+        Parse HTML lineup data to extract athlete information.
+        Uses regex to extract athlete details from the LineupServlet HTML response.
+        Expected format: "seat: name - age (club)"
     Args:
         html (str): HTML content from the LineupServlet response
-        
     Returns:
         list: List of dictionaries containing athlete information:
               - seat (str): The rower's seat position in the boat
@@ -282,20 +416,23 @@ def parse_event_results_json(json_str, job_id=None, event_name=None):
 
 
 def aggregate_athletes(event_results):
-    """Aggregate race results by athlete name.
+    """Aggregate race results by athlete name using intelligent name matching.
     
-    Processes a list of race results and groups them by athlete, handling duplicates
-    and invalid data. Skips entries without finish times or with place code 999
-    (DNS/DNF - Did Not Start/Finish).
+    Processes a list of race results and groups them by athlete using name normalization.
+    This intelligently matches the same person across multiple entries even if their name
+    is formatted differently (e.g., with initials, middle names, or suffixes). Only the
+    first and last name are used for matching and output.
+    
+    Skips entries without finish times or with place code 999 (DNS/DNF - Did Not Start/Finish).
     
     Args:
         event_results (list): List of race result dictionaries from parse_event_results_json()
         
     Returns:
-        dict: Dictionary mapping athlete names to aggregated data:
+        dict: Dictionary mapping normalized athlete names (FirstName LastName) to aggregated data:
               - races (list): List of race results for this athlete
               - clubs (set): Set of clubs the athlete competed for
-              - names (set): Set of name variations for this athlete
+              - names (set): Set of name variations seen for this athlete (for reference)
               - age (str): The athlete's age
     """
     athletes = defaultdict(
@@ -312,7 +449,8 @@ def aggregate_athletes(event_results):
         # Track which names we've already processed in this result to avoid duplicates
         seen_names = set()
         for athlete in result["athletes"]:
-            key = athlete["name"].strip()
+            # Normalize the athlete's name for consistent grouping
+            key = normalize_name(athlete["name"])
             # Create a unique identifier for this race to detect exact duplicates
             race_id = (
                 result["event"],
@@ -382,21 +520,27 @@ def scrape_athletes_from_url(main_url):
     """Scrape and aggregate athlete data from a RegattaCentral main results URL.
     
     Fetches all event results from a main results page and aggregates the race data
-    by athlete name. This function encapsulates the core scraping logic.
+    by athlete name. Also extracts regatta metadata from the page header.
     
     Args:
         main_url (str): URL to the main results page (e.g., a RegattaCentral regatta results page)
         
     Returns:
-        dict: Dictionary mapping athlete names to aggregated data as returned by aggregate_athletes():
-              - races (list): List of race results for this athlete
-              - clubs (set): Set of clubs the athlete competed for
-              - names (set): Set of name variations for this athlete
-              - age (str): The athlete's age
+        tuple: (athletes, regatta_metadata) where:
+            - athletes (dict): Dictionary mapping athlete names to aggregated data:
+                - races (list): List of race results for this athlete
+                - clubs (set): Set of clubs the athlete competed for
+                - names (set): Set of name variations for this athlete
+                - age (str): The athlete's age
+            - regatta_metadata (dict): Dictionary containing regatta information:
+                - name, start_date, end_date, race_type, venue, location, host, sanctioned, entries, clubs
     """
     # Fetch the main results page and extract event links
     html = scraper.get(main_url).text
     event_links = get_event_links(html)
+    
+    # Extract regatta metadata from the page
+    regatta_metadata = get_regatta_metadata(html)
 
     # Fetch and parse each event's JSON results
     # Sequential processing to avoid overwhelming the server
@@ -425,19 +569,29 @@ def scrape_athletes_from_url(main_url):
 
     # Aggregate race results by athlete name
     athletes = aggregate_athletes(all_event_results)
-    return athletes
+    return athletes, regatta_metadata
 
 
 def main():
     """Main execution function for the scraper.
     
     Orchestrates the entire scraping process:
-    1. Scrapes athlete data from the default main results URL
-    2. Prints a summary of athletes and their race results
+    1. Scrapes athlete data and regatta metadata from the default main results URL
+    2. Prints regatta information and a summary of athletes with their race results
     3. Exports the flattened data to CSV
     """
-    # Scrape athletes from the default URL
-    athletes = scrape_athletes_from_url(main_results_url)
+    # Scrape athletes and regatta metadata from the default URL
+    athletes, regatta_metadata = scrape_athletes_from_url(main_results_url)
+    
+    # Print regatta info
+    print(f"Regatta: {regatta_metadata['name']}")
+    print(f"  Dates: {regatta_metadata['start_date']} - {regatta_metadata['end_date']}")
+    print(f"  Venue: {regatta_metadata['venue']}, {regatta_metadata['location']}")
+    print(f"  Host: {regatta_metadata['host']}")
+    print(f"  Type: {regatta_metadata['race_type']}")
+    print(f"  Entries: {regatta_metadata['entries']}, Clubs: {regatta_metadata['clubs']}")
+    print(f"  USRowing Sanctioned: {regatta_metadata['sanctioned']}")
+    print()
     
     # Print summary to console
     for name, info in athletes.items():
